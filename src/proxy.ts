@@ -114,6 +114,15 @@ async function runProxy(
       transportToClient: localTransport,
       transportToServer: remoteTransport,
       ignoredTools,
+      // Allow the proxy to recover from mid-session UnauthorizedError by
+      // (re)starting the OAuth callback server, completing auth, and
+      // replaying the failed request — instead of silently logging it.
+      authInitializer,
+      // Needed so the warm-path 401 recovery (cached token rejected for a
+      // scope upgrade) can invalidate tokens and re-trigger the SDK's
+      // redirectToAuthorization() to open the browser.
+      authProvider,
+      serverUrl,
     })
 
     // Start the local STDIO server

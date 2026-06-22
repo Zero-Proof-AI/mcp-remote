@@ -1,4 +1,4 @@
-import { OAuthClientProvider, UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
+import { OAuthClientProvider, UnauthorizedError, auth } from '@modelcontextprotocol/sdk/client/auth.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { StreamableHTTPClientTransport, StreamableHTTPError } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
@@ -132,13 +132,33 @@ export function mcpProxy({
   transportToClient,
   transportToServer,
   ignoredTools = [],
+  authInitializer,
+  authProvider,
+  serverUrl,
 }: {
   transportToClient: Transport
   transportToServer: Transport
   ignoredTools?: string[]
+  /**
+   * Optional. When provided, mid-session UnauthorizedError on the remote
+   * transport triggers the OAuth callback server (via authInitializer) and
+   * replays the failed request after auth completes — instead of being
+   * silently swallowed by onServerError.
+   */
+  authInitializer?: AuthInitializer
+  /**
+   * Optional. When provided together with serverUrl, the warm-path 401
+   * recovery (StreamableHTTPError code=401, i.e. the server rejected the
+   * cached access token because of a scope upgrade) can invalidate the
+   * cached tokens and ask the SDK to open the browser for a new
+   * authorization round-trip.
+   */
+  authProvider?: OAuthClientProvider
+  serverUrl?: string
 }) {
   let transportToClientClosed = false
   let transportToServerClosed = false
+  let midSessionAuthInFlight: Promise<void> | null = null
 
   const messageTransformer = createMessageTransformer({
     transformRequestFunction: (request: Message) => {
@@ -201,7 +221,7 @@ export function mcpProxy({
       debugLog('Initialize message with modified client info', { clientInfo })
     }
 
-    transportToServer.send(message).catch(onServerError)
+    transportToServer.send(message).catch((err) => onServerSendError(err, message))
   }
 
   transportToServer.onmessage = (_message) => {
@@ -249,6 +269,95 @@ export function mcpProxy({
   function onServerError(error: Error) {
     log('Error from remote server:', error)
     debugLog('Error from remote server', { stack: error.stack })
+  }
+
+  function isAuthError(error: unknown): boolean {
+    if (error instanceof UnauthorizedError) return true
+    // SDK throws StreamableHTTPError(401, "Server returned 401 after successful authentication")
+    // when the cached token is present but the server still rejects it (e.g. scope upgrade required).
+    if (error instanceof StreamableHTTPError && error.code === 401) return true
+    if (error instanceof Error && error.message.includes('Unauthorized')) return true
+    return false
+  }
+
+  function sendJsonRpcError(id: unknown, message: string) {
+    if (id === undefined || id === null) return
+    transportToClient
+      .send({ jsonrpc: '2.0', id, error: { code: -32603, message } } as Message)
+      .catch(onClientError)
+  }
+
+  async function onServerSendError(error: Error, originalMessage: Message, isReplay = false) {
+    log('Error from remote server (during send):', error)
+    debugLog('Error from remote server (during send)', { stack: error.stack, isReplay })
+
+    if (!isAuthError(error) || !authInitializer) {
+      sendJsonRpcError(originalMessage?.id, error.message || 'Server transport error')
+      return
+    }
+
+    if (isReplay) {
+      // We already tried to re-auth and replay once; don't loop.
+      log('Mid-session auth retry still failed; surfacing error to client.')
+      sendJsonRpcError(
+        originalMessage?.id,
+        'Authentication required and re-authentication failed; please retry the request.',
+      )
+      return
+    }
+
+    // The SDK only opens the browser via redirectToAuthorization() when its
+    // own auth() call decides a redirect is needed. For the "warm path" 401
+    // (StreamableHTTPError code=401, where the cached access token exists but
+    // the server rejected it for a scope upgrade) the SDK never reaches that
+    // branch: auth() saw a non-expired cached token, returned AUTHORIZED, the
+    // retry hit 401 again, and StreamableHTTPError was thrown. We have to
+    // force-open the browser ourselves: invalidate the cached tokens and call
+    // auth() so the provider's redirectToAuthorization() fires.
+    const isWarmPath401 = error instanceof StreamableHTTPError && error.code === 401
+
+    // Coalesce concurrent auth attempts so multiple in-flight tools/call
+    // requests share a single OAuth round-trip.
+    if (!midSessionAuthInFlight) {
+      midSessionAuthInFlight = (async () => {
+        try {
+          log('Mid-session auth required. Initializing auth flow...')
+          const { waitForAuthCode } = await authInitializer!()
+          if (isWarmPath401 && authProvider && serverUrl) {
+            log('Invalidating cached tokens and triggering authorization redirect...')
+            const provider = authProvider as OAuthClientProvider & {
+              invalidateCredentials?: (scope: 'all' | 'client' | 'tokens' | 'verifier') => Promise<void> | void
+            }
+            if (typeof provider.invalidateCredentials === 'function') {
+              await provider.invalidateCredentials('tokens')
+            }
+            await auth(authProvider, { serverUrl })
+          }
+          const code = await waitForAuthCode()
+          if (typeof (transportToServer as { finishAuth?: (c: string) => Promise<unknown> }).finishAuth === 'function') {
+            log('Completing mid-session authorization...')
+            await (transportToServer as StreamableHTTPClientTransport).finishAuth(code)
+            log('Mid-session authorization completed.')
+          } else {
+            log('transportToServer has no finishAuth(); auth tokens should now be on disk.')
+          }
+        } finally {
+          midSessionAuthInFlight = null
+        }
+      })()
+    }
+
+    try {
+      await midSessionAuthInFlight
+      log('Replaying original request after mid-session re-auth.')
+      await transportToServer.send(originalMessage).catch((err) => onServerSendError(err, originalMessage, true))
+    } catch (authError: any) {
+      log('Mid-session auth failed:', authError)
+      sendJsonRpcError(
+        originalMessage?.id,
+        `Mid-session re-authentication failed: ${authError?.message ?? authError}`,
+      )
+    }
   }
 }
 
@@ -569,7 +678,12 @@ export async function connectToRemoteServer(
  * @returns An object with the server, authCode, and waitForAuthCode function
  */
 export function setupOAuthCallbackServerWithLongPoll(options: OAuthCallbackServerOptions) {
+  // `authCode` is consumed by waitForAuthCode (set to null after handing out)
+  // so mid-session re-auth gets a fresh code instead of replaying the previous one.
   let authCode: string | null = null
+  // Sticky flag for the cross-instance long-poll endpoint; preserves the
+  // "auth has completed at least once" signal even after authCode is consumed.
+  let authCompleted = false
   const app = express()
 
   // Create a promise to track when auth is completed
@@ -580,7 +694,7 @@ export function setupOAuthCallbackServerWithLongPoll(options: OAuthCallbackServe
 
   // Long-polling endpoint
   app.get('/wait-for-auth', (req, res) => {
-    if (authCode) {
+    if (authCompleted) {
       // Auth already completed - just return 200 without the actual code
       // Secondary instances will read tokens from disk
       log('Auth already completed, returning 200')
@@ -627,6 +741,7 @@ export function setupOAuthCallbackServerWithLongPoll(options: OAuthCallbackServe
     }
 
     authCode = code
+    authCompleted = true
     log('Auth code received, resolving promise')
     authCompletedResolve(code)
 
@@ -652,11 +767,17 @@ export function setupOAuthCallbackServerWithLongPoll(options: OAuthCallbackServe
   const waitForAuthCode = (): Promise<string> => {
     return new Promise((resolve) => {
       if (authCode) {
-        resolve(authCode)
+        // Consume cached code so a subsequent mid-session re-auth waits for
+        // the next callback rather than replaying the already-redeemed code.
+        const code = authCode
+        authCode = null
+        resolve(code)
         return
       }
 
       options.events.once('auth-code-received', (code) => {
+        // Same consume-once semantics for the live event path.
+        authCode = null
         resolve(code)
       })
     })
