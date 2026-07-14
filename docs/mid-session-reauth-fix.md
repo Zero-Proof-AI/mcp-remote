@@ -345,17 +345,17 @@ distinct name and (b) point every installer + uninstaller at that package.
 
 ### 8.1 Task: publish the fork to npm
 
-**Package name:** `@zeroproof/mcp-remote` (scoped under the existing `@zeroproof` org;
+**Package name:** `@zeroproofai/mcp-remote` (scoped under the existing `@zeroproofai` org;
 keeps the upstream `mcp-remote` name free and makes the divergence obvious).
 
-**Recommended initial version:** `0.1.38-zeroproof.1` (preserves the upstream base version,
+**Recommended initial version:** `0.1.38-zeroproofai.1` (preserves the upstream base version,
 adds a vendor pre-release suffix that increments per patch).
 
 Subtasks:
 
 1. **Update `package.json`** in this repo:
-   - `"name": "@zeroproof/mcp-remote"`
-   - `"version": "0.1.38-zeroproof.1"`
+   - `"name": "@zeroproofai/mcp-remote"`
+   - `"version": "0.1.38-zeroproofai.1"`
    - `"publishConfig": { "access": "public" }` (scoped packages default to private).
    - Update the `"bugs"` and `"repository"` URLs to point at the zeroproof fork.
    - Keep the `"bin"` block unchanged (`mcp-remote → dist/proxy.js`,
@@ -369,12 +369,12 @@ Subtasks:
    `LICENSE` (drop `src/`, `test/`, `docs/` from the published tarball — keep the package
    small).
 4. **Dry-run publish:** `pnpm publish --dry-run --access public` and inspect the file list.
-5. **Publish:** `npm login` (under the `@zeroproof` org) then
+5. **Publish:** `npm login` (under the `@zeroproofai` org) then
    `pnpm publish --access public`.
 6. **Smoke test from a clean dir:**
    ```bash
    mkdir /tmp/mcp-remote-smoke && cd /tmp/mcp-remote-smoke
-   npm init -y && npm install -g @zeroproof/mcp-remote@0.1.38-zeroproof.1
+   npm init -y && npm install -g @zeroproofai/mcp-remote@0.1.38-zeroproofai.1
    which mcp-remote && mcp-remote --version 2>&1 | head -3
    ```
 7. **Tag the commit** in this repo: `git tag v0.1.38-zeroproof.1 && git push --tags`.
@@ -540,10 +540,10 @@ once at app startup).
 
 ### 8.3 Acceptance checklist
 
-- [ ] `@zeroproof/mcp-remote@0.1.38-zeroproof.1` is published and installs cleanly via
+- [ ] `@zeroproofai/mcp-remote@0.1.38-zeroproofai.1` is published and installs cleanly via
       `npm install -g`.
 - [ ] `which mcp-remote` resolves to the global npm bin and `mcp-remote --version`
-      reports `0.1.38-zeroproof.1`.
+      reports `0.1.38-zeroproofai.1`.
 - [ ] [zero-proof-intent/scripts/install.sh](../../zero-proof-intent/scripts/install.sh)
       and `.ps1` install the fork on a clean machine.
 - [ ] Both installers cleanly upgrade a machine that already has upstream

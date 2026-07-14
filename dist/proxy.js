@@ -63466,7 +63466,7 @@ import { readFile, rm } from "fs/promises";
 import path2 from "path";
 
 // package.json
-var version2 = "0.1.38";
+var version2 = "0.1.38-zeroproofai.1";
 
 // src/lib/utils.ts
 var import_undici = __toESM(require_undici(), 1);
@@ -63900,7 +63900,7 @@ function setupOAuthCallbackServerWithLongPoll(options) {
     const longPollTimeout = setTimeout(() => {
       log("Long poll timeout reached, responding with 202");
       res.status(202).send("Authentication in progress");
-    }, options.authTimeoutMs || 3e4);
+    }, options.authTimeoutMs || 3e5);
     authCompletedPromise.then(() => {
       clearTimeout(longPollTimeout);
       if (!res.headersSent) {
@@ -64086,7 +64086,7 @@ async function parseCommandLineArgs(args, usage) {
     }
     j++;
   }
-  let authTimeoutMs = 3e4;
+  let authTimeoutMs = 3e5;
   const authTimeoutIndex = args.indexOf("--auth-timeout");
   if (authTimeoutIndex !== -1 && authTimeoutIndex < args.length - 1) {
     const timeoutSeconds = parseInt(args[authTimeoutIndex + 1], 10);

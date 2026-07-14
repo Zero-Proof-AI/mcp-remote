@@ -208,7 +208,7 @@ You can specify multiple `--ignore-tool` flags to ignore different patterns. Exa
 - `*account` - ignores all tools ending with "account" (e.g., `getAccount`, `updateAccount`)
 - `exactTool` - ignores only the tool named exactly "exactTool"
 
-* To change the timeout for the OAuth callback (by default `30` seconds), add the `--auth-timeout` flag with a value in seconds. This is useful if the authentication process on the server side takes a long time.
+* To change the timeout for the OAuth callback (by default `300` seconds), add the `--auth-timeout` flag with a value in seconds. This is useful if the authentication process on the server side takes a long time.
 
 ```json
       "args": [

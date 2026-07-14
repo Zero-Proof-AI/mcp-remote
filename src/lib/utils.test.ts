@@ -333,8 +333,8 @@ describe('Feature: Command Line Arguments Parsing', () => {
     // When parsing the command line arguments
     const result = await parseCommandLineArgs(args, usage)
 
-    // Then the default auth timeout should be 30000ms
-    expect(result.authTimeoutMs).toBe(30000)
+    // Then the default auth timeout should be 300000ms
+    expect(result.authTimeoutMs).toBe(300000)
   })
 
   it('Scenario: Parse valid auth timeout in seconds and convert to milliseconds', async () => {
@@ -359,7 +359,7 @@ describe('Feature: Command Line Arguments Parsing', () => {
     const result = await parseCommandLineArgs(args, usage)
 
     // Then the default timeout should be used and warning logged
-    expect(result.authTimeoutMs).toBe(30000)
+    expect(result.authTimeoutMs).toBe(300000)
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining('Warning: Ignoring invalid auth timeout value: invalid. Must be a positive number.'),
     )
@@ -377,7 +377,7 @@ describe('Feature: Command Line Arguments Parsing', () => {
     const result = await parseCommandLineArgs(args, usage)
 
     // Then the default timeout should be used and warning logged
-    expect(result.authTimeoutMs).toBe(30000)
+    expect(result.authTimeoutMs).toBe(300000)
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining('Warning: Ignoring invalid auth timeout value: -30. Must be a positive number.'),
     )
@@ -395,7 +395,7 @@ describe('Feature: Command Line Arguments Parsing', () => {
     const result = await parseCommandLineArgs(args, usage)
 
     // Then the default timeout should be used and warning logged
-    expect(result.authTimeoutMs).toBe(30000)
+    expect(result.authTimeoutMs).toBe(300000)
     expect(consoleSpy).toHaveBeenCalledWith(
       expect.stringContaining('Warning: Ignoring invalid auth timeout value: 0. Must be a positive number.'),
     )

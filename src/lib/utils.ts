@@ -708,11 +708,11 @@ export function setupOAuthCallbackServerWithLongPoll(options: OAuthCallbackServe
       return
     }
 
-    // Long poll - wait for up to 30 seconds
+    // Long poll - wait for up to the configured auth timeout
     const longPollTimeout = setTimeout(() => {
       log('Long poll timeout reached, responding with 202')
       res.status(202).send('Authentication in progress')
-    }, options.authTimeoutMs || 30000)
+    }, options.authTimeoutMs || 300000)
 
     // If auth completes while we're waiting, send the response immediately
     authCompletedPromise
@@ -975,7 +975,7 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
   }
 
   // Parse auth timeout
-  let authTimeoutMs = 30000 // Default 30 seconds
+  let authTimeoutMs = 300000 // Default 300 seconds
   const authTimeoutIndex = args.indexOf('--auth-timeout')
   if (authTimeoutIndex !== -1 && authTimeoutIndex < args.length - 1) {
     const timeoutSeconds = parseInt(args[authTimeoutIndex + 1], 10)

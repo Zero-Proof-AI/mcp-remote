@@ -1,6 +1,6 @@
 {
-  "name": "mcp-remote",
-  "version": "0.1.38",
+  "name": "@zeroproofai/mcp-remote",
+  "version": "0.1.38-zeroproofai.1",
   "description": "Remote proxy for Model Context Protocol, allowing local-only clients to connect to remote servers using oAuth",
   "keywords": [
     "mcp",
@@ -11,7 +11,10 @@
   ],
   "author": "Glen Maddern <glen@glenmaddern.com>",
   "license": "MIT",
-  "repository": "https://github.com/geelen/mcp-remote",
+  "repository": "https://github.com/Zero-Proof-AI/mcp-remote.git",
+  "bugs": {
+    "url": "https://github.com/Zero-Proof-AI/mcp-remote/issues"
+  },
   "type": "module",
   "files": [
     "dist",
@@ -28,8 +31,12 @@
     "build:watch": "tsup --watch",
     "check": "prettier --check . && tsc",
     "lint-fix": "prettier --check . --write",
+    "prepublishOnly": "pnpm build",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "express": "^4.21.2",
